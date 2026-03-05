@@ -18,6 +18,7 @@ import { Storage } from "../contracts/abi"
 // EvmConfig defines the configuration for a single EVM chain.
 type EvmConfig = {
   storageAddress: string
+  oracleAddress: string
   chainName: string
 }
 
@@ -27,7 +28,7 @@ type Config = {
   evms: EvmConfig[]
 }
 
-type MyResult = {
+type CEX = {
   price: bigint
 }
 
@@ -37,10 +38,10 @@ const initWorkflow = (config: Config) => {
   return [handler(cron.trigger({ schedule: config.schedule }), onCronTrigger)]
 }
 
-// fetchMathResult is the function passed to the runInNodeMode helper.
+// fetchCEXResult is the function passed to the runInNodeMode helper.
 // It contains the logic for making the request and parsing the response.
-// fetchMathResult is the function passed to the runInNodeMode helper.
-const fetchMathResult = (nodeRuntime: NodeRuntime<Config>): bigint => {
+// fetchCEXResult is the function passed to the runInNodeMode helper.
+const fetchCEXResult = (nodeRuntime: NodeRuntime<Config>): bigint => {
   const httpClient = new HTTPClient()
 
   const req = {
@@ -62,13 +63,13 @@ const fetchMathResult = (nodeRuntime: NodeRuntime<Config>): bigint => {
   return BigInt(priceNumber)
 }
 
-const onCronTrigger = (runtime: Runtime<Config>): MyResult => {
+const onCronTrigger = (runtime: Runtime<Config>): CEX => {
   runtime.log("Hello, Calculator! Workflow triggered.")
   // Use runInNodeMode to execute the offchain fetch.
   // The API returns the price of ETH/USDC, so each node can get a different result.
   // We use median consensus to find a single, trusted value.
   // Step 1: Fetch offchain data (from Part 2)
-  const offchainValue = runtime.runInNodeMode(fetchMathResult, consensusMedianAggregation())().result()
+  const offchainValue = runtime.runInNodeMode(fetchCEXResult, consensusMedianAggregation())().result()
 
   runtime.log(`Successfully fetched and aggregated price result: ${offchainValue}`)
 
@@ -82,6 +83,7 @@ const onCronTrigger = (runtime: Runtime<Config>): MyResult => {
     chainSelectorName: evmConfig.chainName,
     isTestnet: true,
   })
+  
   if (!network) {
     throw new Error(`Unknown chain name: ${evmConfig.chainName}`)
   }

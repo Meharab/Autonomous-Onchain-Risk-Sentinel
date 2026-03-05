@@ -16234,7 +16234,7 @@ var initWorkflow = (config) => {
   const cron = new CronCapability;
   return [handler(cron.trigger({ schedule: config.schedule }), onCronTrigger)];
 };
-var fetchMathResult = (nodeRuntime) => {
+var fetchCEXResult = (nodeRuntime) => {
   const httpClient = new ClientCapability3;
   const req = {
     url: nodeRuntime.config.apiUrl,
@@ -16250,7 +16250,7 @@ var fetchMathResult = (nodeRuntime) => {
 };
 var onCronTrigger = (runtime2) => {
   runtime2.log("Hello, Calculator! Workflow triggered.");
-  const offchainValue = runtime2.runInNodeMode(fetchMathResult, consensusMedianAggregation())().result();
+  const offchainValue = runtime2.runInNodeMode(fetchCEXResult, consensusMedianAggregation())().result();
   runtime2.log(`Successfully fetched and aggregated price result: ${offchainValue}`);
   const evmConfig = runtime2.config.evms[0];
   const network248 = getNetwork({

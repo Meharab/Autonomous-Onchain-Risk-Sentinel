@@ -4,6 +4,7 @@
   "evms": [
     {
       "storageAddress": "0xa17CF997C28FF154eDBae1422e6a50BeF23927F4",
+      "oracleAddress": "0x694AA1769357215DE4FAC081bf1f309aDC325306",
       "chainName": "ethereum-testnet-sepolia"
     }
   ]
