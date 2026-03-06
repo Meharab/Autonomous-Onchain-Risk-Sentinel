@@ -1,3 +1,1 @@
-export const Oracle = [
-    "function latestRoundData() view returns (uint80, int256, uint256, uint256, uint80)"
-] as const
+export const Oracle = [{ "type": "constructor", "inputs": [{ "name": "_price", "type": "address", "internalType": "address" }, { "name": "_volatility", "type": "address", "internalType": "address" }], "stateMutability": "nonpayable" }, { "type": "function", "name": "getETHUSDPrice", "inputs": [], "outputs": [{ "name": "", "type": "int256", "internalType": "int256" }], "stateMutability": "view" }, { "type": "function", "name": "getETHUSDVolatility", "inputs": [], "outputs": [{ "name": "", "type": "int256", "internalType": "int256" }], "stateMutability": "view" }] as const

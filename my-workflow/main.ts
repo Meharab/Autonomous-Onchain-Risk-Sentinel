@@ -13,7 +13,7 @@ import {
   bytesToHex,
 } from "@chainlink/cre-sdk"
 import { encodeFunctionData, decodeFunctionResult, zeroAddress } from "viem"
-import { Storage } from "../contracts/abi"
+import { Storage, Oracle } from "../contracts/abi"
 
 // EvmConfig defines the configuration for a single EVM chain.
 type EvmConfig = {
