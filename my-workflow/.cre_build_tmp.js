@@ -16221,13 +16221,28 @@ var sendErrorResponse = (error) => {
 var zeroAddress = "0x0000000000000000000000000000000000000000";
 init_decodeFunctionResult();
 init_encodeFunctionData();
-var Storage = [
+var Oracle = [
   {
+    type: "constructor",
+    inputs: [
+      { name: "_price", type: "address", internalType: "address" },
+      { name: "_volatility", type: "address", internalType: "address" }
+    ],
+    stateMutability: "nonpayable"
+  },
+  {
+    type: "function",
+    name: "getETHUSDPrice",
     inputs: [],
-    name: "get",
-    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-    stateMutability: "view",
-    type: "function"
+    outputs: [{ name: "", type: "int256", internalType: "int256" }],
+    stateMutability: "view"
+  },
+  {
+    type: "function",
+    name: "getETHUSDVolatility",
+    inputs: [],
+    outputs: [{ name: "", type: "int256", internalType: "int256" }],
+    stateMutability: "view"
   }
 ];
 var initWorkflow = (config) => {
@@ -16250,8 +16265,8 @@ var fetchCEXResult = (nodeRuntime) => {
 };
 var onCronTrigger = (runtime2) => {
   runtime2.log("Hello, Calculator! Workflow triggered.");
-  const offchainValue = runtime2.runInNodeMode(fetchCEXResult, consensusMedianAggregation())().result();
-  runtime2.log(`Successfully fetched and aggregated price result: ${offchainValue}`);
+  const cexPrice = runtime2.runInNodeMode(fetchCEXResult, consensusMedianAggregation())().result();
+  runtime2.log(`Successfully fetched and aggregated price result: ${cexPrice}`);
   const evmConfig = runtime2.config.evms[0];
   const network248 = getNetwork({
     chainFamily: "evm",
@@ -16262,29 +16277,45 @@ var onCronTrigger = (runtime2) => {
     throw new Error(`Unknown chain name: ${evmConfig.chainName}`);
   }
   const evmClient = new cre.capabilities.EVMClient(network248.chainSelector.selector);
-  const callData = encodeFunctionData({
-    abi: Storage,
-    functionName: "get"
+  const priceCallData = encodeFunctionData({
+    abi: Oracle,
+    functionName: "getETHUSDPrice"
   });
-  const contractCall = evmClient.callContract(runtime2, {
+  const priceContractCall = evmClient.callContract(runtime2, {
     call: encodeCallMsg({
       from: zeroAddress,
-      to: evmConfig.storageAddress,
-      data: callData
+      to: evmConfig.oracleAddress,
+      data: priceCallData
     }),
     blockNumber: LAST_FINALIZED_BLOCK_NUMBER
   }).result();
-  const onchainValue = decodeFunctionResult({
-    abi: Storage,
-    functionName: "get",
-    data: bytesToHex(contractCall.data)
+  const oraclePrice = decodeFunctionResult({
+    abi: Oracle,
+    functionName: "getETHUSDPrice",
+    data: bytesToHex(priceContractCall.data)
   });
-  runtime2.log(`Successfully read onchain value: ${onchainValue}`);
-  const finalResult = onchainValue + offchainValue;
-  runtime2.log(`Final calculated result: ${finalResult}`);
-  return {
-    price: finalResult
-  };
+  runtime2.log(`Successfully read onchain value: ${oraclePrice}`);
+  const D = Math.abs(Number(cexPrice - oraclePrice)) / Number(oraclePrice);
+  runtime2.log(`Final calculated result: ${D}`);
+  const _volatilityCallData = encodeFunctionData({
+    abi: Oracle,
+    functionName: "getETHUSDVolatility"
+  });
+  const volatilityContractCall = evmClient.callContract(runtime2, {
+    call: encodeCallMsg({
+      from: zeroAddress,
+      to: evmConfig.oracleAddress,
+      data: _volatilityCallData
+    }),
+    blockNumber: LAST_FINALIZED_BLOCK_NUMBER
+  }).result();
+  const oracleVolatility = decodeFunctionResult({
+    abi: Oracle,
+    functionName: "getETHUSDVolatility",
+    data: bytesToHex(volatilityContractCall.data)
+  });
+  runtime2.log(`Successfully read onchain value: ${oracleVolatility}`);
+  return parseFloat((oracleVolatility / 100000n).toString());
 };
 async function main() {
   const runner = await Runner.newRunner();

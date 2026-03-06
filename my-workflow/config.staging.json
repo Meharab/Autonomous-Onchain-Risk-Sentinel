@@ -3,8 +3,7 @@
   "apiUrl": "https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDC",
   "evms": [
     {
-      "storageAddress": "0xa17CF997C28FF154eDBae1422e6a50BeF23927F4",
-      "oracleAddress": "0x694AA1769357215DE4FAC081bf1f309aDC325306",
+      "oracleAddress": "0x93a4C2C19C733D53724A990676a2f62C359BF7aa",
       "chainName": "ethereum-testnet-sepolia"
     }
   ]

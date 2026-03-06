@@ -13,11 +13,10 @@ import {
   bytesToHex,
 } from "@chainlink/cre-sdk"
 import { encodeFunctionData, decodeFunctionResult, zeroAddress } from "viem"
-import { Storage, Oracle } from "../contracts/abi"
+import { Oracle } from "../contracts/abi"
 
 // EvmConfig defines the configuration for a single EVM chain.
 type EvmConfig = {
-  storageAddress: string
   oracleAddress: string
   chainName: string
 }
@@ -63,15 +62,15 @@ const fetchCEXResult = (nodeRuntime: NodeRuntime<Config>): bigint => {
   return BigInt(priceNumber)
 }
 
-const onCronTrigger = (runtime: Runtime<Config>): CEX => {
+const onCronTrigger = (runtime: Runtime<Config>): any => {
   runtime.log("Hello, Calculator! Workflow triggered.")
   // Use runInNodeMode to execute the offchain fetch.
   // The API returns the price of ETH/USDC, so each node can get a different result.
   // We use median consensus to find a single, trusted value.
   // Step 1: Fetch offchain data (from Part 2)
-  const offchainValue = runtime.runInNodeMode(fetchCEXResult, consensusMedianAggregation())().result()
+  const cexPrice = runtime.runInNodeMode(fetchCEXResult, consensusMedianAggregation())().result()
 
-  runtime.log(`Successfully fetched and aggregated price result: ${offchainValue}`)
+  runtime.log(`Successfully fetched and aggregated price result: ${cexPrice}`)
 
   // Get the first EVM configuration from the list.
   const evmConfig = runtime.config.evms[0]
@@ -90,40 +89,65 @@ const onCronTrigger = (runtime: Runtime<Config>): CEX => {
 
   const evmClient = new cre.capabilities.EVMClient(network.chainSelector.selector)
 
-  // Encode the function call using the Storage ABI
-  const callData = encodeFunctionData({
-    abi: Storage,
-    functionName: "get",
+  // Encode the function call using the Oracle ABI
+  const priceCallData = encodeFunctionData({
+    abi: Oracle,
+    functionName: "getETHUSDPrice",
   })
 
   // Call the contract
-  const contractCall = evmClient
+  const priceContractCall = evmClient
     .callContract(runtime, {
       call: encodeCallMsg({
         from: zeroAddress,
-        to: evmConfig.storageAddress as `0x${string}`,
-        data: callData,
+        to: evmConfig.oracleAddress as `0x${string}`,
+        data: priceCallData,
       }),
       blockNumber: LAST_FINALIZED_BLOCK_NUMBER,
     })
     .result()
 
   // Decode the result
-  const onchainValue = decodeFunctionResult({
-    abi: Storage,
-    functionName: "get",
-    data: bytesToHex(contractCall.data),
+  const oraclePrice = decodeFunctionResult({
+    abi: Oracle,
+    functionName: "getETHUSDPrice",
+    data: bytesToHex(priceContractCall.data),
   }) as bigint
 
-  runtime.log(`Successfully read onchain value: ${onchainValue}`)
+  runtime.log(`Successfully read onchain value: ${oraclePrice}`)
 
   // Step 3: Combine the results
-  const finalResult = onchainValue + offchainValue
-  runtime.log(`Final calculated result: ${finalResult}`)
+  const D = Math.abs(Number(cexPrice - oraclePrice)) / Number(oraclePrice);
+  runtime.log(`Final calculated result: ${D}`)
 
-  return {
-    price: finalResult,
-  }
+  // Encode the function call using the Oracle ABI
+  const _volatilityCallData = encodeFunctionData({
+    abi: Oracle,
+    functionName: "getETHUSDVolatility",
+  })
+
+  // Call the contract
+  const volatilityContractCall = evmClient
+    .callContract(runtime, {
+      call: encodeCallMsg({
+        from: zeroAddress,
+        to: evmConfig.oracleAddress as `0x${string}`,
+        data: _volatilityCallData,
+      }),
+      blockNumber: LAST_FINALIZED_BLOCK_NUMBER,
+    })
+    .result()
+
+  // Decode the result
+  const oracleVolatility = decodeFunctionResult({
+    abi: Oracle,
+    functionName: "getETHUSDVolatility",
+    data: bytesToHex(volatilityContractCall.data),
+  }) as bigint
+
+  runtime.log(`Successfully read onchain value: ${oracleVolatility}`)
+
+  return parseFloat((oracleVolatility/100000n).toString())
 }
 
 export async function main() {
