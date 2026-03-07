@@ -16315,7 +16315,8 @@ var onCronTrigger = (runtime2) => {
     data: bytesToHex(volatilityContractCall.data)
   });
   runtime2.log(`Successfully read onchain value: ${oracleVolatility}`);
-  return parseFloat((oracleVolatility / 100000n).toString());
+  const V = parseFloat(oracleVolatility.toString()) / 1e5;
+  return 0.5 * D + 0.5 * V;
 };
 async function main() {
   const runner = await Runner.newRunner();

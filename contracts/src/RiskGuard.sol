@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {LendingProtocol} from "./LendingProtocol.sol";
+import {ReceiverTemplate} from "./interfaces/ReceiverTemplate.sol";
 
 /**
  * @title RiskGuard
@@ -17,7 +18,7 @@ import {LendingProtocol} from "./LendingProtocol.sol";
  * - move user funds
  * - modify user balances directly
  */
-contract RiskGuard {
+contract RiskGuard is ReceiverTemplate {
     // -------------------------------------------------------------------------
     // Configuration
     // -------------------------------------------------------------------------
@@ -54,7 +55,10 @@ contract RiskGuard {
     // Construction
     // -------------------------------------------------------------------------
 
-    constructor(address _creExecutor, address _protocol, uint256 _minCollateralRatio, uint256 _maxCollateralRatio) {
+    /// @notice Constructor sets the Chainlink Forwarder address for security
+    /// @param _forwarderAddress The address of the Chainlink KeystoneForwarder contract
+    /// @dev For Sepolia testnet, use: 0x15fc6ae953e024d975e77382eeec56a9101f9f88
+    constructor(address _creExecutor, address _protocol, uint256 _minCollateralRatio, uint256 _maxCollateralRatio, address _forwarderAddress) ReceiverTemplate(_forwarderAddress) {
         require(_creExecutor != address(0), "RiskGuard: zero executor");
         require(_protocol != address(0), "RiskGuard: zero protocol");
         require(_minCollateralRatio <= _maxCollateralRatio, "RiskGuard: bad bounds");
@@ -63,6 +67,27 @@ contract RiskGuard {
         protocol = LendingProtocol(_protocol);
         minCollateralRatio = _minCollateralRatio;
         maxCollateralRatio = _maxCollateralRatio;
+    }
+
+    // ================================================================
+    // │                      CRE Entry Point                         │
+    // ================================================================
+
+    /// @inheritdoc ReceiverTemplate
+    /// @dev Routes to either pause borrowing or harden protocol & adjust interest based on risk score.
+    ///      - risk score > 80 → Pause borrowing
+    ///      - risk score <= 80 → Harden protocol & adjust interest
+    function _processReport(bytes calldata report) internal override {
+        (uint256 newRatio, uint256 riskScore, uint256 newSlope) = abi.decode(report, (uint256, uint256, uint256));
+        if (riskScore > 80) {
+             // In a real implementation, the risk score thresholds and corresponding actions
+             // would be carefully calibrated based on the protocol's risk management framework.
+             // For this hackathon prototype, we use a simple threshold for demonstration.
+             pauseBorrowing(riskScore);
+        } else {
+             hardenProtocol(newRatio, riskScore);
+             adjustInterest(newSlope, riskScore);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -74,7 +99,7 @@ contract RiskGuard {
      * @dev CRE first computes a risk score offchain and maps it to a ratio
      *      within [minCollateralRatio, maxCollateralRatio].
      */
-    function hardenProtocol(uint256 newRatio, uint256 riskScore) external onlyCRE {
+    function hardenProtocol(uint256 newRatio, uint256 riskScore) internal onlyCRE {
         require(newRatio >= minCollateralRatio, "RiskGuard: ratio below min");
         require(newRatio <= maxCollateralRatio, "RiskGuard: ratio above max");
 
@@ -86,7 +111,7 @@ contract RiskGuard {
     /**
      * @notice Pause new borrowing when CRE classifies regime as CRISIS.
      */
-    function pauseBorrowing(uint256 riskScore) external onlyCRE {
+    function pauseBorrowing(uint256 riskScore) internal onlyCRE {
         protocol.setBorrowingPaused(true);
         emit RiskActionExecuted(riskScore, protocol.collateralRatio(), true);
     }
@@ -94,7 +119,7 @@ contract RiskGuard {
     /**
      * @notice Adjust interest rate slope as a softer risk control.
      */
-    function adjustInterest(uint256 newSlope, uint256 riskScore) external onlyCRE {
+    function adjustInterest(uint256 newSlope, uint256 riskScore) internal onlyCRE {
         protocol.updateInterestSlope(newSlope);
         emit RiskActionExecuted(riskScore, protocol.collateralRatio(), protocol.borrowingPaused());
     }
@@ -107,10 +132,9 @@ contract RiskGuard {
      * @notice Optionally rotate CRE executor (e.g., new CRE configuration).
      * @dev In a production deployment this would likely be governed.
      */
-    function setExecutor(address newExecutor) external {
+    function setExecutor(address newExecutor) external onlyCRE {
         // For simplicity of the hackathon prototype we allow the current executor
         // to rotate itself. This can be upgraded to a governance-controlled method.
-        require(msg.sender == creExecutor, "RiskGuard: only current executor");
         require(newExecutor != address(0), "RiskGuard: zero executor");
         address old = creExecutor;
         creExecutor = newExecutor;
@@ -120,8 +144,7 @@ contract RiskGuard {
     /**
      * @notice Optionally adjust allowable bounds for collateral ratio.
      */
-    function setBounds(uint256 newMin, uint256 newMax) external {
-        require(msg.sender == creExecutor, "RiskGuard: only executor");
+    function setBounds(uint256 newMin, uint256 newMax) external onlyCRE{
         require(newMin <= newMax, "RiskGuard: bad bounds");
 
         uint256 oldMin = minCollateralRatio;

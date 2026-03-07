@@ -62,7 +62,7 @@ const fetchCEXResult = (nodeRuntime: NodeRuntime<Config>): bigint => {
   return BigInt(priceNumber)
 }
 
-const onCronTrigger = (runtime: Runtime<Config>): any => {
+const onCronTrigger = (runtime: Runtime<Config>): number => {
   runtime.log("Hello, Calculator! Workflow triggered.")
   // Use runInNodeMode to execute the offchain fetch.
   // The API returns the price of ETH/USDC, so each node can get a different result.
@@ -147,7 +147,8 @@ const onCronTrigger = (runtime: Runtime<Config>): any => {
 
   runtime.log(`Successfully read onchain value: ${oracleVolatility}`)
 
-  return parseFloat((oracleVolatility/100000n).toString())
+  const V = parseFloat(oracleVolatility.toString()) / 100000
+  return ((0.5*D)+(0.5*V))
 }
 
 export async function main() {
