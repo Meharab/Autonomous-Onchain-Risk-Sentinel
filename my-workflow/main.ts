@@ -11,8 +11,10 @@ import {
   LAST_FINALIZED_BLOCK_NUMBER,
   encodeCallMsg,
   bytesToHex,
+  hexToBase64,
+  TxStatus,
 } from "@chainlink/cre-sdk"
-import { encodeFunctionData, decodeFunctionResult, zeroAddress } from "viem"
+import { encodeFunctionData, decodeFunctionResult, zeroAddress, parseAbiParameters, encodeAbiParameters } from "viem"
 import { Oracle, LendingProtocol, RiskGuard } from "../contracts/abi"
 
 // EvmConfig defines the configuration for a single EVM chain.
@@ -21,6 +23,7 @@ type EvmConfig = {
   oracleAddress: string
   lendingProtocolAddress: string
   riskGuardAddress: string
+  gasLimit: string
 }
 
 type Config = {
@@ -32,6 +35,11 @@ type Config = {
 type CEX = {
   price: bigint
 }
+
+const myAddress = "0x55F710a5509f4a8a8fE8a41dF476e51daD401454";
+
+/** ABI parameters for settlement report (outcome is uint8 for Prediction enum) */
+const Risk_PARAMS = parseAbiParameters("uint256 newRatio, uint256 riskScore, uint256 newSlope");
 
 const initWorkflow = (config: Config) => {
   const cron = new CronCapability()
@@ -64,7 +72,7 @@ const fetchCEXResult = (nodeRuntime: NodeRuntime<Config>): bigint => {
   return BigInt(priceNumber)
 }
 
-const onCronTrigger = (runtime: Runtime<Config>): number => {
+const onCronTrigger = (runtime: Runtime<Config>): string => {
   runtime.log("Hello, Calculator! Workflow triggered.")
   // Use runInNodeMode to execute the offchain fetch.
   // The API returns the price of ETH/USDC, so each node can get a different result.
@@ -162,7 +170,8 @@ const onCronTrigger = (runtime: Runtime<Config>): number => {
   // Encode the function call using the Oracle ABI
   const debtCallData = encodeFunctionData({
     abi: LendingProtocol,
-    functionName: "totalDebt",
+    functionName: "debtBalance",
+    args: [myAddress],
   })
 
   // Call the contract
@@ -180,7 +189,7 @@ const onCronTrigger = (runtime: Runtime<Config>): number => {
   // Decode the result
   const totalDebt = decodeFunctionResult({
     abi: LendingProtocol,
-    functionName: "totalDebt",
+    functionName: "debtBalance",
     data: bytesToHex(debtContractCall.data),
   }) as bigint
 
@@ -191,7 +200,8 @@ const onCronTrigger = (runtime: Runtime<Config>): number => {
   // Encode the function call using the Oracle ABI
   const collateralCallData = encodeFunctionData({
     abi: LendingProtocol,
-    functionName: "totalCollateral",
+    functionName: "collateralBalance",
+    args: [myAddress],
   })
 
   // Call the contract
@@ -209,13 +219,92 @@ const onCronTrigger = (runtime: Runtime<Config>): number => {
   // Decode the result
   const totalCollateral = decodeFunctionResult({
     abi: LendingProtocol,
-    functionName: "totalCollateral",
+    functionName: "collateralBalance",
     data: bytesToHex(collateralContractCall.data),
   }) as bigint
 
   runtime.log(`Successfully read onchain value: ${totalCollateral}`)
-  
-  return ((0.5*D)+(0.5*V))
+
+  const U = parseFloat(totalCollateral.toString()) / parseFloat(totalDebt.toString())
+
+  runtime.log(`Final calculated result: ${U}`)
+
+  const R = ((0.5*D)+(0.3*V)+(0.2*U)) * 100
+
+  runtime.log(`Final risk score: ${R}`)
+
+  // -------------------------------------------------------------------------------------------------------
+  if (R > 50) {
+    runtime.log(`Risk score ${R} exceeds threshold, pausing borrowing...`)
+    try {
+      runtime.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      runtime.log("CRE Workflow: Trigger - Risk Guard Intervention");
+      runtime.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      // ─────────────────────────────────────────────────────────────
+      // Step 4: Write settlement report to contract (EVM Write)
+      // ─────────────────────────────────────────────────────────────
+      runtime.log("[Step 4] Generating settlement report...");
+
+      // ─────────────────────────────────────────────────────────────
+      // Step 3: Encode the market data for the smart contract
+      // ─────────────────────────────────────────────────────────────
+      runtime.log("[Step 3] Encoding market data...");
+
+      // Encode report data
+      const reportData = encodeAbiParameters(Risk_PARAMS, [
+        BigInt(1500000000000000000), BigInt(Math.round(R)), BigInt(10000000000000000)
+      ]);
+
+      // ─────────────────────────────────────────────────────────────
+      // Step 4: Generate a signed CRE report
+      // ─────────────────────────────────────────────────────────────
+      runtime.log("[Step 4] Generating CRE report...");
+
+      const reportResponse = runtime
+        .report({
+          encodedPayload: hexToBase64(reportData),
+          encoderName: "evm",
+          signingAlgo: "ecdsa",
+          hashingAlgo: "keccak256",
+        })
+        .result();
+
+      // ─────────────────────────────────────────────────────────────
+      // Step 5: Write the report to the smart contract
+      // ─────────────────────────────────────────────────────────────
+      runtime.log(`[Step 5] Writing to contract: ${evmConfig.riskGuardAddress}`);
+
+      const writeResult = evmClient
+        .writeReport(runtime, {
+          receiver: evmConfig.riskGuardAddress,
+          report: reportResponse,
+          gasConfig: {
+            gasLimit: evmConfig.gasLimit,
+          },
+        })
+        .result();
+
+      // ─────────────────────────────────────────────────────────────
+      // Step 6: Check result and return transaction hash
+      // ─────────────────────────────────────────────────────────────
+      if (writeResult.txStatus === TxStatus.SUCCESS) {
+        const txHash = bytesToHex(writeResult.txHash || new Uint8Array(32));
+        runtime.log(`[Step 6] ✓ Transaction successful: ${txHash}`);
+        runtime.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        return txHash;
+      }
+
+      throw new Error(`Transaction failed with status: ${writeResult.txStatus}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      runtime.log(`[ERROR] ${msg}`);
+      runtime.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      throw err;
+    }
+  } else {
+    runtime.log(`Risk score ${R} is within acceptable range.`)
+    return `Risk score ${R} is within acceptable range.`
+  }
 }
 
 export async function main() {
