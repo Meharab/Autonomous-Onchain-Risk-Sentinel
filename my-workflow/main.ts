@@ -32,13 +32,13 @@ type Config = {
   evms: EvmConfig[]
 }
 
-type CEX = {
-  price: bigint
-}
+// type CEX = {
+//   price: bigint
+// }
 
 const myAddress = "0x55F710a5509f4a8a8fE8a41dF476e51daD401454";
 
-/** ABI parameters for settlement report (outcome is uint8 for Prediction enum) */
+/** ABI parameters for data report */
 const Risk_PARAMS = parseAbiParameters("uint256 newRatio, uint256 riskScore, uint256 newSlope");
 
 const initWorkflow = (config: Config) => {
@@ -49,7 +49,6 @@ const initWorkflow = (config: Config) => {
 
 // fetchCEXResult is the function passed to the runInNodeMode helper.
 // It contains the logic for making the request and parsing the response.
-// fetchCEXResult is the function passed to the runInNodeMode helper.
 const fetchCEXResult = (nodeRuntime: NodeRuntime<Config>): bigint => {
   const httpClient = new HTTPClient()
 
@@ -73,21 +72,29 @@ const fetchCEXResult = (nodeRuntime: NodeRuntime<Config>): bigint => {
 }
 
 const onCronTrigger = (runtime: Runtime<Config>): string => {
-  runtime.log("Hello, Calculator! Workflow triggered.")
+  runtime.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  runtime.log("CRE Workflow: Cron Trigger");
+  runtime.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  // ─────────────────────────────────────────────────────────────
+  // Fetch offchain CEX (Binance) price data 
+  // ─────────────────────────────────────────────────────────────
+  runtime.log("━━━━━━ Fetch offchain CEX (Binance) price data ━━━━━")
   // Use runInNodeMode to execute the offchain fetch.
   // The API returns the price of ETH/USDC, so each node can get a different result.
   // We use median consensus to find a single, trusted value.
-  // Step 1: Fetch offchain data (from Part 2)
+  // Fetch offchain data
   const cexPrice = runtime.runInNodeMode(fetchCEXResult, consensusMedianAggregation())().result()
 
-  runtime.log(`Successfully fetched and aggregated price result: ${cexPrice}`)
+  runtime.log(`Successfully fetched and aggregated CEX price result: ${cexPrice}`)
 
-  // ---------------------------------------------------------------------------------------------------------
+  // ─────────────────────────────────────────────────────────────
+  // Create EVM client
+  // ─────────────────────────────────────────────────────────────
 
   // Get the first EVM configuration from the list.
   const evmConfig = runtime.config.evms[0]
 
-  // Step 2: Read onchain data using the EVM client
+  // Read onchain data using the EVM client
   // Convert the human-readable chain name to a chain selector
   const network = getNetwork({
     chainFamily: "evm",
@@ -101,7 +108,10 @@ const onCronTrigger = (runtime: Runtime<Config>): string => {
 
   const evmClient = new cre.capabilities.EVMClient(network.chainSelector.selector)
 
-  // ----------------------------------------------------------------------------------------------------------------
+  // ─────────────────────────────────────────────────────────────
+  // Fetch onchain Oracle (Chainlink) price data 
+  // ─────────────────────────────────────────────────────────────
+  runtime.log("━━━━━━ Fetch onchain Oracle (Chainlink) price data ━━━━━")
 
   // Encode the function call using the Oracle ABI
   const priceCallData = encodeFunctionData({
@@ -128,13 +138,16 @@ const onCronTrigger = (runtime: Runtime<Config>): string => {
     data: bytesToHex(priceContractCall.data),
   }) as bigint
 
-  runtime.log(`Successfully read onchain value: ${oraclePrice}`)
+  runtime.log(`Successfully read onchain price value: ${oraclePrice}`)
 
-  // Step 3: Combine the results
+  // Calculate the deviation between CEX price and Oracle price, normalized by the Oracle price
   const D = Math.abs(Number(cexPrice - oraclePrice)) / Number(oraclePrice);
-  runtime.log(`Final calculated result: ${D}`)
+  runtime.log(`Deviation(D): ${D}`)
 
-  // **********************************************************************
+  // ─────────────────────────────────────────────────────────────
+  // Fetch onchain Oracle (Chainlink) volatility data 
+  // ─────────────────────────────────────────────────────────────
+  runtime.log("━━━━━━ Fetch onchain Oracle (Chainlink) volatility data ━━━━━")
 
   // Encode the function call using the Oracle ABI
   const volatilityCallData = encodeFunctionData({
@@ -161,13 +174,18 @@ const onCronTrigger = (runtime: Runtime<Config>): string => {
     data: bytesToHex(volatilityContractCall.data),
   }) as bigint
   
-  runtime.log(`Successfully read onchain value: ${oracleVolatility}`)
+  runtime.log(`Successfully read onchain volatility value: ${oracleVolatility}`)
   
   const V = parseFloat(oracleVolatility.toString()) / 100000
 
-  // ----------------------------------------------------------------------------------------------------------------
+  runtime.log(`Volatility (V): ${V}`)
+
+  // ─────────────────────────────────────────────────────────────
+  // Fetch lending protocol smart contract debt balance data
+  // ─────────────────────────────────────────────────────────────
+  runtime.log("━━━━━━ Fetch lending protocol smart contract debt balance data ━━━━━")
   
-  // Encode the function call using the Oracle ABI
+  // Encode the function call using the LendingProtocol ABI
   const debtCallData = encodeFunctionData({
     abi: LendingProtocol,
     functionName: "debtBalance",
@@ -193,11 +211,14 @@ const onCronTrigger = (runtime: Runtime<Config>): string => {
     data: bytesToHex(debtContractCall.data),
   }) as bigint
 
-  runtime.log(`Successfully read onchain value: ${totalDebt}`)
+  runtime.log(`Successfully read smart contract debt balance: ${totalDebt}`)
 
-  // **********************************************************************************
+  // ─────────────────────────────────────────────────────────────
+  // Fetch lending protocol smart contract collateral balance data
+  // ─────────────────────────────────────────────────────────────
+  runtime.log("━━━━━━ Fetch lending protocol smart contract collateral balance data ━━━━━")
 
-  // Encode the function call using the Oracle ABI
+  // Encode the function call using the LendingProtocol ABI
   const collateralCallData = encodeFunctionData({
     abi: LendingProtocol,
     functionName: "collateralBalance",
@@ -223,32 +244,35 @@ const onCronTrigger = (runtime: Runtime<Config>): string => {
     data: bytesToHex(collateralContractCall.data),
   }) as bigint
 
-  runtime.log(`Successfully read onchain value: ${totalCollateral}`)
+  runtime.log(`Successfully read smart contract collateral balance: ${totalCollateral}`)
 
   const U = parseFloat(totalCollateral.toString()) / parseFloat(totalDebt.toString())
 
-  runtime.log(`Final calculated result: ${U}`)
+  runtime.log(`Utilization (U): ${U}`)
+
+  // ─────────────────────────────────────────────────────────────
+  // Calculating Risk Score: R = alpha*D + beta*V + gamma*U
+  // ─────────────────────────────────────────────────────────────
 
   const R = ((0.5*D)+(0.3*V)+(0.2*U)) * 100
 
-  runtime.log(`Final risk score: ${R}`)
+  runtime.log(`Final risk score (R): ${R}`)
 
-  // -------------------------------------------------------------------------------------------------------
+  runtime.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  runtime.log("CRE Workflow: Trigger - Risk Guard Intervention");
+  runtime.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   if (R > 50) {
     runtime.log(`Risk score ${R} exceeds threshold, pausing borrowing...`)
     try {
-      runtime.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-      runtime.log("CRE Workflow: Trigger - Risk Guard Intervention");
-      runtime.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
       // ─────────────────────────────────────────────────────────────
-      // Step 4: Write settlement report to contract (EVM Write)
+      // Write data report to contract (EVM Write)
       // ─────────────────────────────────────────────────────────────
-      runtime.log("[Step 4] Generating settlement report...");
+      runtime.log("Generating data report...");
 
       // ─────────────────────────────────────────────────────────────
-      // Step 3: Encode the market data for the smart contract
+      // Encode the data for the smart contract
       // ─────────────────────────────────────────────────────────────
-      runtime.log("[Step 3] Encoding market data...");
+      runtime.log("Encoding data...");
 
       // Encode report data
       const reportData = encodeAbiParameters(Risk_PARAMS, [
@@ -256,9 +280,9 @@ const onCronTrigger = (runtime: Runtime<Config>): string => {
       ]);
 
       // ─────────────────────────────────────────────────────────────
-      // Step 4: Generate a signed CRE report
+      // Generate a signed CRE report
       // ─────────────────────────────────────────────────────────────
-      runtime.log("[Step 4] Generating CRE report...");
+      runtime.log("Generating CRE report...");
 
       const reportResponse = runtime
         .report({
@@ -270,9 +294,9 @@ const onCronTrigger = (runtime: Runtime<Config>): string => {
         .result();
 
       // ─────────────────────────────────────────────────────────────
-      // Step 5: Write the report to the smart contract
+      // Write the report to the smart contract
       // ─────────────────────────────────────────────────────────────
-      runtime.log(`[Step 5] Writing to contract: ${evmConfig.riskGuardAddress}`);
+      runtime.log(`Writing to contract: ${evmConfig.riskGuardAddress}`);
 
       const writeResult = evmClient
         .writeReport(runtime, {
@@ -285,11 +309,11 @@ const onCronTrigger = (runtime: Runtime<Config>): string => {
         .result();
 
       // ─────────────────────────────────────────────────────────────
-      // Step 6: Check result and return transaction hash
+      // Check result and return transaction hash
       // ─────────────────────────────────────────────────────────────
       if (writeResult.txStatus === TxStatus.SUCCESS) {
         const txHash = bytesToHex(writeResult.txHash || new Uint8Array(32));
-        runtime.log(`[Step 6] ✓ Transaction successful: ${txHash}`);
+        runtime.log(`✓ Transaction successful: ${txHash}`);
         runtime.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         return txHash;
       }
@@ -303,7 +327,7 @@ const onCronTrigger = (runtime: Runtime<Config>): string => {
     }
   } else {
     runtime.log(`Risk score ${R} is within acceptable range.`)
-    return `Risk score ${R} is within acceptable range.`
+    return `${R}`
   }
 }
 

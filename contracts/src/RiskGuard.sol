@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
-// 0xa3b3B1afE42caFC83298a2F37BcE1D318a021626
+// Deployed Address on Sepolia Testnet: 0xa3b3B1afE42caFC83298a2F37BcE1D318a021626
 
 import {LendingProtocol} from "./LendingProtocol.sol";
 import {ReceiverTemplate} from "./interfaces/ReceiverTemplate.sol";
@@ -39,7 +39,6 @@ contract RiskGuard is ReceiverTemplate {
     // -------------------------------------------------------------------------
 
     event RiskActionExecuted(uint256 riskScore, uint256 newCollateralRatio, bool borrowingPaused);
-
     event ExecutorUpdated(address oldExecutor, address newExecutor);
     event BoundsUpdated(uint256 oldMin, uint256 oldMax, uint256 newMin, uint256 newMax);
 
@@ -100,7 +99,7 @@ contract RiskGuard is ReceiverTemplate {
      * @dev CRE first computes a risk score offchain and maps it to a ratio
      *      within [minCollateralRatio, maxCollateralRatio].
      */
-    function hardenProtocol(uint256 newRatio, uint256 riskScore) internal onlyCRE {
+    function hardenProtocol(uint256 newRatio, uint256 riskScore) public onlyCRE {
         require(newRatio >= minCollateralRatio, "RiskGuard: ratio below min");
         require(newRatio <= maxCollateralRatio, "RiskGuard: ratio above max");
 
@@ -112,7 +111,7 @@ contract RiskGuard is ReceiverTemplate {
     /**
      * @notice Pause new borrowing when CRE classifies regime as CRISIS.
      */
-    function pauseBorrowing(uint256 riskScore) internal onlyCRE {
+    function pauseBorrowing(uint256 riskScore) public onlyCRE {
         protocol.setBorrowingPaused(true);
         emit RiskActionExecuted(riskScore, protocol.collateralRatio(), true);
     }
@@ -120,7 +119,7 @@ contract RiskGuard is ReceiverTemplate {
     /**
      * @notice Adjust interest rate slope as a softer risk control.
      */
-    function adjustInterest(uint256 newSlope, uint256 riskScore) internal onlyCRE {
+    function adjustInterest(uint256 newSlope, uint256 riskScore) public onlyCRE {
         protocol.updateInterestSlope(newSlope);
         emit RiskActionExecuted(riskScore, protocol.collateralRatio(), protocol.borrowingPaused());
     }

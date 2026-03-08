@@ -7,9 +7,9 @@ contract AggregatorV3 {
   AggregatorV3Interface internal priceFeed;
   AggregatorV3Interface internal volatilityFeed;
 
-  constructor(address _price, address _volatility) {
-    priceFeed = AggregatorV3Interface(_price); // 0x694AA1769357215DE4FAC081bf1f309aDC325306
-    volatilityFeed = AggregatorV3Interface(_volatility); // 0x31D04174D0e1643963b38d87f26b0675Bb7dC96e
+  constructor(address _priceDataFeed, address _volatilityDataFeed) {
+    priceFeed = AggregatorV3Interface(_priceDataFeed); // 0x694AA1769357215DE4FAC081bf1f309aDC325306
+    volatilityFeed = AggregatorV3Interface(_volatilityDataFeed); // 0x31D04174D0e1643963b38d87f26b0675Bb7dC96e
   }
 
   function getETHUSDPrice() public view returns (int256) {

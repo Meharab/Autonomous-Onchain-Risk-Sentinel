@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
-// 0x07a5f52d58Ce686a628af8bBbC202c19240F460b
+// Deployed Address on Sepolia Testnet: 0x07a5f52d58Ce686a628af8bBbC202c19240F460b
 /**
  * @title LendingProtocol
  * @notice Minimal ETH-collateral / USDC-debt lending model used for risk monitoring.

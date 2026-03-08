@@ -17039,9 +17039,12 @@ var fetchCEXResult = (nodeRuntime) => {
   return BigInt(priceNumber);
 };
 var onCronTrigger = (runtime2) => {
-  runtime2.log("Hello, Calculator! Workflow triggered.");
+  runtime2.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  runtime2.log("CRE Workflow: Cron Trigger");
+  runtime2.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  runtime2.log("━━━━━━ Fetch offchain CEX (Binance) price data ━━━━━");
   const cexPrice = runtime2.runInNodeMode(fetchCEXResult, consensusMedianAggregation())().result();
-  runtime2.log(`Successfully fetched and aggregated price result: ${cexPrice}`);
+  runtime2.log(`Successfully fetched and aggregated CEX price result: ${cexPrice}`);
   const evmConfig = runtime2.config.evms[0];
   const network248 = getNetwork({
     chainFamily: "evm",
@@ -17052,6 +17055,7 @@ var onCronTrigger = (runtime2) => {
     throw new Error(`Unknown chain name: ${evmConfig.chainName}`);
   }
   const evmClient = new cre.capabilities.EVMClient(network248.chainSelector.selector);
+  runtime2.log("━━━━━━ Fetch onchain Oracle (Chainlink) price data ━━━━━");
   const priceCallData = encodeFunctionData({
     abi: Oracle,
     functionName: "getETHUSDPrice"
@@ -17069,9 +17073,10 @@ var onCronTrigger = (runtime2) => {
     functionName: "getETHUSDPrice",
     data: bytesToHex(priceContractCall.data)
   });
-  runtime2.log(`Successfully read onchain value: ${oraclePrice}`);
+  runtime2.log(`Successfully read onchain price value: ${oraclePrice}`);
   const D = Math.abs(Number(cexPrice - oraclePrice)) / Number(oraclePrice);
-  runtime2.log(`Final calculated result: ${D}`);
+  runtime2.log(`Deviation(D): ${D}`);
+  runtime2.log("━━━━━━ Fetch onchain Oracle (Chainlink) volatility data ━━━━━");
   const volatilityCallData = encodeFunctionData({
     abi: Oracle,
     functionName: "getETHUSDVolatility"
@@ -17089,8 +17094,10 @@ var onCronTrigger = (runtime2) => {
     functionName: "getETHUSDVolatility",
     data: bytesToHex(volatilityContractCall.data)
   });
-  runtime2.log(`Successfully read onchain value: ${oracleVolatility}`);
+  runtime2.log(`Successfully read onchain volatility value: ${oracleVolatility}`);
   const V = parseFloat(oracleVolatility.toString()) / 1e5;
+  runtime2.log(`Volatility (V): ${V}`);
+  runtime2.log("━━━━━━ Fetch lending protocol smart contract debt balance data ━━━━━");
   const debtCallData = encodeFunctionData({
     abi: LendingProtocol,
     functionName: "debtBalance",
@@ -17109,7 +17116,8 @@ var onCronTrigger = (runtime2) => {
     functionName: "debtBalance",
     data: bytesToHex(debtContractCall.data)
   });
-  runtime2.log(`Successfully read onchain value: ${totalDebt}`);
+  runtime2.log(`Successfully read smart contract debt balance: ${totalDebt}`);
+  runtime2.log("━━━━━━ Fetch lending protocol smart contract collateral balance data ━━━━━");
   const collateralCallData = encodeFunctionData({
     abi: LendingProtocol,
     functionName: "collateralBalance",
@@ -17128,32 +17136,32 @@ var onCronTrigger = (runtime2) => {
     functionName: "collateralBalance",
     data: bytesToHex(collateralContractCall.data)
   });
-  runtime2.log(`Successfully read onchain value: ${totalCollateral}`);
+  runtime2.log(`Successfully read smart contract collateral balance: ${totalCollateral}`);
   const U = parseFloat(totalCollateral.toString()) / parseFloat(totalDebt.toString());
-  runtime2.log(`Final calculated result: ${U}`);
+  runtime2.log(`Utilization (U): ${U}`);
   const R = (0.5 * D + 0.3 * V + 0.2 * U) * 100;
-  runtime2.log(`Final risk score: ${R}`);
+  runtime2.log(`Final risk score (R): ${R}`);
+  runtime2.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  runtime2.log("CRE Workflow: Trigger - Risk Guard Intervention");
+  runtime2.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   if (R > 50) {
     runtime2.log(`Risk score ${R} exceeds threshold, pausing borrowing...`);
     try {
-      runtime2.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-      runtime2.log("CRE Workflow: Trigger - Risk Guard Intervention");
-      runtime2.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-      runtime2.log("[Step 4] Generating settlement report...");
-      runtime2.log("[Step 3] Encoding market data...");
+      runtime2.log("Generating data report...");
+      runtime2.log("Encoding data...");
       const reportData = encodeAbiParameters(Risk_PARAMS, [
         BigInt(1500000000000000000),
         BigInt(Math.round(R)),
         BigInt(10000000000000000)
       ]);
-      runtime2.log("[Step 4] Generating CRE report...");
+      runtime2.log("Generating CRE report...");
       const reportResponse = runtime2.report({
         encodedPayload: hexToBase64(reportData),
         encoderName: "evm",
         signingAlgo: "ecdsa",
         hashingAlgo: "keccak256"
       }).result();
-      runtime2.log(`[Step 5] Writing to contract: ${evmConfig.riskGuardAddress}`);
+      runtime2.log(`Writing to contract: ${evmConfig.riskGuardAddress}`);
       const writeResult = evmClient.writeReport(runtime2, {
         receiver: evmConfig.riskGuardAddress,
         report: reportResponse,
@@ -17163,7 +17171,7 @@ var onCronTrigger = (runtime2) => {
       }).result();
       if (writeResult.txStatus === TxStatus.SUCCESS) {
         const txHash = bytesToHex(writeResult.txHash || new Uint8Array(32));
-        runtime2.log(`[Step 6] ✓ Transaction successful: ${txHash}`);
+        runtime2.log(`✓ Transaction successful: ${txHash}`);
         runtime2.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         return txHash;
       }
@@ -17176,7 +17184,7 @@ var onCronTrigger = (runtime2) => {
     }
   } else {
     runtime2.log(`Risk score ${R} is within acceptable range.`);
-    return `Risk score ${R} is within acceptable range.`;
+    return `${R}`;
   }
 };
 async function main() {
