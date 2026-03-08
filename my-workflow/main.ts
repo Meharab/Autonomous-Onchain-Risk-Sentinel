@@ -13,7 +13,7 @@ import {
   bytesToHex,
 } from "@chainlink/cre-sdk"
 import { encodeFunctionData, decodeFunctionResult, zeroAddress } from "viem"
-import { Oracle } from "../contracts/abi"
+import { Oracle, LendingProtocol, RiskGuard } from "../contracts/abi"
 
 // EvmConfig defines the configuration for a single EVM chain.
 type EvmConfig = {
@@ -72,6 +72,8 @@ const onCronTrigger = (runtime: Runtime<Config>): number => {
 
   runtime.log(`Successfully fetched and aggregated price result: ${cexPrice}`)
 
+  // ---------------------------------------------------------------------------------------------------------
+
   // Get the first EVM configuration from the list.
   const evmConfig = runtime.config.evms[0]
 
@@ -88,6 +90,8 @@ const onCronTrigger = (runtime: Runtime<Config>): number => {
   }
 
   const evmClient = new cre.capabilities.EVMClient(network.chainSelector.selector)
+
+  // ----------------------------------------------------------------------------------------------------------------
 
   // Encode the function call using the Oracle ABI
   const priceCallData = encodeFunctionData({
@@ -120,34 +124,95 @@ const onCronTrigger = (runtime: Runtime<Config>): number => {
   const D = Math.abs(Number(cexPrice - oraclePrice)) / Number(oraclePrice);
   runtime.log(`Final calculated result: ${D}`)
 
+  // **********************************************************************
+
   // Encode the function call using the Oracle ABI
-  const _volatilityCallData = encodeFunctionData({
+  const volatilityCallData = encodeFunctionData({
     abi: Oracle,
     functionName: "getETHUSDVolatility",
   })
-
+  
   // Call the contract
   const volatilityContractCall = evmClient
-    .callContract(runtime, {
-      call: encodeCallMsg({
-        from: zeroAddress,
-        to: evmConfig.oracleAddress as `0x${string}`,
-        data: _volatilityCallData,
-      }),
-      blockNumber: LAST_FINALIZED_BLOCK_NUMBER,
-    })
-    .result()
-
+  .callContract(runtime, {
+    call: encodeCallMsg({
+      from: zeroAddress,
+      to: evmConfig.oracleAddress as `0x${string}`,
+      data: volatilityCallData,
+    }),
+    blockNumber: LAST_FINALIZED_BLOCK_NUMBER,
+  })
+  .result()
+  
   // Decode the result
   const oracleVolatility = decodeFunctionResult({
     abi: Oracle,
     functionName: "getETHUSDVolatility",
     data: bytesToHex(volatilityContractCall.data),
   }) as bigint
-
+  
   runtime.log(`Successfully read onchain value: ${oracleVolatility}`)
-
+  
   const V = parseFloat(oracleVolatility.toString()) / 100000
+
+  // ----------------------------------------------------------------------------------------------------------------
+  
+  // Encode the function call using the Oracle ABI
+  const debtCallData = encodeFunctionData({
+    abi: LendingProtocol,
+    functionName: "totalDebt",
+  })
+
+  // Call the contract
+  const debtContractCall = evmClient
+    .callContract(runtime, {
+      call: encodeCallMsg({
+        from: zeroAddress,
+        to: evmConfig.lendingProtocolAddress as `0x${string}`,
+        data: debtCallData,
+      }),
+      blockNumber: LAST_FINALIZED_BLOCK_NUMBER,
+    })
+    .result()
+
+  // Decode the result
+  const totalDebt = decodeFunctionResult({
+    abi: LendingProtocol,
+    functionName: "totalDebt",
+    data: bytesToHex(debtContractCall.data),
+  }) as bigint
+
+  runtime.log(`Successfully read onchain value: ${totalDebt}`)
+
+  // **********************************************************************************
+
+  // Encode the function call using the Oracle ABI
+  const collateralCallData = encodeFunctionData({
+    abi: LendingProtocol,
+    functionName: "totalCollateral",
+  })
+
+  // Call the contract
+  const collateralContractCall = evmClient
+    .callContract(runtime, {
+      call: encodeCallMsg({
+        from: zeroAddress,
+        to: evmConfig.lendingProtocolAddress as `0x${string}`,
+        data: collateralCallData,
+      }),
+      blockNumber: LAST_FINALIZED_BLOCK_NUMBER,
+    })
+    .result()
+
+  // Decode the result
+  const totalCollateral = decodeFunctionResult({
+    abi: LendingProtocol,
+    functionName: "totalCollateral",
+    data: bytesToHex(collateralContractCall.data),
+  }) as bigint
+
+  runtime.log(`Successfully read onchain value: ${totalCollateral}`)
+  
   return ((0.5*D)+(0.5*V))
 }
 
