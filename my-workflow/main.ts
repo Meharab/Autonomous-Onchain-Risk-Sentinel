@@ -17,8 +17,10 @@ import { Oracle, LendingProtocol, RiskGuard } from "../contracts/abi"
 
 // EvmConfig defines the configuration for a single EVM chain.
 type EvmConfig = {
-  oracleAddress: string
   chainName: string
+  oracleAddress: string
+  lendingProtocolAddress: string
+  riskGuardAddress: string
 }
 
 type Config = {

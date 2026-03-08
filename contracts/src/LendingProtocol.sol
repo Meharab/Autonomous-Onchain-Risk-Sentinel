@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
-
+// 0x07a5f52d58Ce686a628af8bBbC202c19240F460b
 /**
  * @title LendingProtocol
  * @notice Minimal ETH-collateral / USDC-debt lending model used for risk monitoring.
@@ -77,11 +77,9 @@ contract LendingProtocol {
     // Construction
     // -------------------------------------------------------------------------
 
-    constructor(address _riskGuard, uint256 _initialCollateralRatio, uint256 _initialInterestSlope) {
-        require(_riskGuard != address(0), "LendingProtocol: zero riskGuard");
-        riskGuard = _riskGuard;
-        _setCollateralRatio(_initialCollateralRatio);
-        interestSlope = _initialInterestSlope;
+    constructor(uint256 _initialCollateralRatio, uint256 _initialInterestSlope) {
+        _setCollateralRatio(_initialCollateralRatio); // 1500000000000000000 ~ 150%
+        interestSlope = _initialInterestSlope; // 10000000000000000 ~ 0.01
     }
 
     // -------------------------------------------------------------------------
@@ -160,6 +158,11 @@ contract LendingProtocol {
     // -------------------------------------------------------------------------
     // RiskGuard-controlled parameter updates
     // -------------------------------------------------------------------------
+
+    function setRiskGuard(address _riskGuard) external {
+        require(_riskGuard != address(0), "LendingProtocol: zero riskGuard");
+        riskGuard = _riskGuard;
+    }
 
     function updateCollateralRatio(uint256 newRatio) external onlyRiskGuard {
         _setCollateralRatio(newRatio);

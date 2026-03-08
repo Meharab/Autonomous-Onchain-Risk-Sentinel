@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
+// 0xa3b3B1afE42caFC83298a2F37BcE1D318a021626
 
 import {LendingProtocol} from "./LendingProtocol.sol";
 import {ReceiverTemplate} from "./interfaces/ReceiverTemplate.sol";
@@ -63,10 +64,10 @@ contract RiskGuard is ReceiverTemplate {
         require(_protocol != address(0), "RiskGuard: zero protocol");
         require(_minCollateralRatio <= _maxCollateralRatio, "RiskGuard: bad bounds");
 
-        creExecutor = _creExecutor;
-        protocol = LendingProtocol(_protocol);
-        minCollateralRatio = _minCollateralRatio;
-        maxCollateralRatio = _maxCollateralRatio;
+        creExecutor = _creExecutor; // 0x55F710a5509f4a8a8fE8a41dF476e51daD401454
+        protocol = LendingProtocol(_protocol); // 0x07a5f52d58Ce686a628af8bBbC202c19240F460b
+        minCollateralRatio = _minCollateralRatio; // 1500000000000000000 ~ 150%
+        maxCollateralRatio = _maxCollateralRatio; // 2000000000000000000 ~ 200%
     }
 
     // ================================================================

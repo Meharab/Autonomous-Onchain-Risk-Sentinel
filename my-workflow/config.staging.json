@@ -1,10 +1,12 @@
 {
-  "schedule": "0 */5 * * * *",
+  "schedule": "0 */1 * * * *",
   "apiUrl": "https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDC",
   "evms": [
     {
+      "chainName": "ethereum-testnet-sepolia",
       "oracleAddress": "0x93a4C2C19C733D53724A990676a2f62C359BF7aa",
-      "chainName": "ethereum-testnet-sepolia"
+      "lendingProtocolAddress": "0x07a5f52d58Ce686a628af8bBbC202c19240F460b",
+      "riskGuardAddress": "0xa3b3B1afE42caFC83298a2F37BcE1D318a021626"
     }
   ]
 }
