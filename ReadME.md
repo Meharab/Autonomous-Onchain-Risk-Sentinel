@@ -1,17 +1,76 @@
 > # Architecture of the **Autonomous Risk Sentinel Protocol**.
+A Chainlink CRE-powered system that continuously monitors protocol risk and automatically triggers defensive actions onchain.
 
-## 1. System Overview
+The system connects:
+
+- onchain protocol state
+- offchain market data
+- deterministic risk computation
+- and automated protocol safeguards
+
+All orchestrated through Chainlink Runtime Environment workflows.
+
+## 0. System Overview
 
 The system is a closed-loop risk control framework composed of three primary layers:
 
 1. **Blockchain Layer** – Deterministic state machine and enforcement logic
 2. **CRE Orchestration Layer** – Offchain risk computation and decision execution
-3. **External Data Layer** – Market and volatility data providers
+3. **Execution Layer** – triggers onchain actions
+
+First is the **Blockchain Layer**, where we have two smart contracts.
+
+`LendingProtocol` simulates a lending protocol with collateral deposits and borrowing.
+
+`RiskGuard` acts as the protocol’s defensive control module, capable of adjusting collateral requirements or pausing borrowing.
+
+Second is the **CRE Orchestration Layer**, which continuously monitors the system.
+
+The CRE workflow fetches:
+
+- onchain protocol state
+- external market data from APIs
+- and oracle price feeds.
+
+Then it computes a protocol risk score and decides whether the protocol needs to harden its defenses.
+
+Finally, the **Execution Layer** triggers onchain actions through the RiskGuard contract.
 
 The control loop is:
 
 ```bash
 Observe → Quantify → Decide → Execute → Emit
+```
+
+## 1. High-Level Architecture Diagram
+
+```bash
+                    ┌──────────────────────┐
+                    │   External Systems   │
+                    │----------------------│
+                    │  Binance API         │
+                    │  Volatility API      │
+                    │  Liquidity API       │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                   ┌───────────────────────┐
+                   │   CRE Workflow        │
+                   │-----------------------│
+                   │  1. Fetch Offchain    │
+                   │  2. Fetch Onchain     │
+                   │  3. Compute Risk      │
+                   │  4. Decision Engine   │
+                   │  5. Submit Tx         │
+                   └──────────┬────────────┘
+                              │
+                              ▼
+        ┌──────────────────────────────────────────┐
+        │             Blockchain Layer             │
+        │------------------------------------------│
+        │  LendingProtocol.sol                     │
+        │  RiskGuard.sol                           │
+        └──────────────────────────────────────────┘
 ```
 
 ## 2. Blockchain Layer
