@@ -1,12 +1,12 @@
-> # Architecture of the **Autonomous Risk Sentinel Protocol**.
+> # Architecture of the **Autonomous Risk Sentinel Protocol**
 A Chainlink CRE-powered system that continuously monitors protocol risk and automatically triggers defensive actions onchain.
 
 The system connects:
 
-- onchain protocol state
-- offchain market data
-- deterministic risk computation
-- and automated protocol safeguards
+- Monitors onchain DeFi protocol health (TVL, collateral ratio, oracle deviations)
+- Pulls external market volatility data (CEX APIs)
+- Runs risk analysis offchain
+- Triggers protective actions automatically onchain
 
 All orchestrated through Chainlink Runtime Environment workflows.
 
@@ -41,6 +41,23 @@ The control loop is:
 ```bash
 Observe → Quantify → Decide → Execute → Emit
 ```
+
+### 0.1 Concrete Example Use Case
+
+Let’s say we simulate:
+
+- A lending protocol
+- With collateral asset X
+- If price volatility > threshold
+- Or CEX price deviates from oracle price
+- Or reserve ratio drops
+
+Then automatically:
+
+- Increase collateral ratio
+- Pause new borrowing
+- Trigger circuit breaker
+- Notify governance
 
 ## 1. High-Level Architecture Diagram
 
@@ -343,11 +360,20 @@ From APIs:
 
 #### Step 3 — Risk Engine
 
+Let:
+
+- $P_{cex}$ = CEX price
+- $P_{oracle}$ = Oracle price
+- 𝑉 = Volatility index
+- 𝑅 = Reserve ratio
+
 Compute:
 
 $$
 \Huge D = \frac{|P_{cex} - P_{oracle}|}{P_{oracle}}
 $$
+
+Risk function:
 
 $$
 \Huge \mathcal{R} = \alpha D + \beta V + \gamma U
@@ -361,6 +387,10 @@ Where:
 
 
 #### Step 4 — Regime Classification
+
+Trigger if: 𝑅 > 𝜏
+
+Where 𝜏 is a threshold value
 
 ```bash
 if R < 0.15 → NORMAL
@@ -487,7 +517,45 @@ Visible on Tenderly.
 
 
 
-## 7. Architectural Strength
+## 7. Security Considerations
+
+We must restrict:
+
+* Only whitelisted workflows can call RiskGuard
+* No arbitrary parameter changes
+* Hard-coded max bounds
+* Avoid building a governance bypass nightmare.
+
+
+
+## 8. Failure Modes & Mitigations
+
+We must anticipate issues.
+
+- Case 1 — API failure
+
+CRE:
+
+* Must fail safely
+* If missing data → do nothing
+
+- Case 2 — Oracle glitch
+
+We detect abnormal deviation, but require confirmation across 2 sources.
+
+- Case 3 — Overreaction
+
+We cap:
+
+```
+maxCollateralRatio = 200%
+```
+
+Prevents runaway tightening.
+
+
+
+## 9. Architectural Strength
 
 This design:
 
@@ -497,6 +565,20 @@ This design:
 * Provides measurable risk adaptation
 * Demonstrates real-world financial engineering principles
 
-This is autonomous.
+This is **autonomous preventative stabilization logic**. It is a **dynamic systemic risk controller**.
 
-It is a **dynamic systemic risk controller**.
+
+
+## 10. How AI Can Be Used (Future)
+
+Use AI for:
+
+- Risk classification
+- Anomaly detection
+- Stress simulation
+
+Example:
+
+- Feed volatility + liquidity metrics
+- LLM explains risk category
+- Decision logic is still rule-based
