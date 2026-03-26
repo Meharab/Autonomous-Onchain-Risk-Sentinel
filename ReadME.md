@@ -11,8 +11,11 @@ The system connects:
 All orchestrated through Chainlink Runtime Environment workflows.
 
 ## 0. System Overview
+# Architecture of the **Autonomous Risk Sentinel Protocol**.
 
-The system is a closed-loop risk control framework composed of three primary layers:
+## System Overview
+
+From the first principles, this system is a **closed-loop risk control framework** for a DeFi protocol; composed of three primary layers:
 
 1. **Blockchain Layer** – Deterministic state machine and enforcement logic
 2. **CRE Orchestration Layer** – Offchain risk computation and decision execution
@@ -91,6 +94,20 @@ Then automatically:
 ```
 
 ## 2. Blockchain Layer
+In control theory terms:
+
+* The lending protocol is the plant.
+* Market signals are disturbances.
+* CRE workflow is the controller.
+* RiskGuard contract is the actuator.
+
+We can decompose this into 3 domains:
+
+1. Onchain execution layer
+2. Offchain orchestration layer (CRE)
+3. Data ingestion layer
+
+## Blockchain Layer
 
 The blockchain layer enforces state transitions and parameter changes.
 
@@ -99,7 +116,7 @@ It contains **two smart contracts**:
 1. `LendingProtocol.sol`
 2. `RiskGuard.sol`
 
-### 2.1 `LendingProtocol.sol`
+### 1. `LendingProtocol.sol`
 
 #### Purpose
 
@@ -132,8 +149,8 @@ These represent protocol-wide exposure.
 ##### ii. Risk Parameters
 
 ```solidity
-uint256 public collateralRatio;        // e.g., 150% scaled by 1e18
-uint256 public interestSlope;          // interest rate slope parameter
+uint256 public collateralRatio; // e.g., 150% scaled by 1e18
+uint256 public interestSlope;   // interest rate slope parameter
 bool public borrowingPaused;
 ```
 
@@ -158,19 +175,19 @@ Adds collateral.
 
 Invariant:
 
-$$
+```math
 \Huge totalCollateral = \sum collateralBalance[i]
-$$
+```
 
 
 ##### ii. `borrow(uint256 amount)`
 
 Conditions:
 
-$$
+```math
 \Huge \frac{collateralBalance[user] \cdot P}{debtBalance[user] + amount}
 \ge collateralRatio
-$$
+```
 
 Also:
 
@@ -188,14 +205,31 @@ Reduces user debt and totalDebt.
 
 Triggered when:
 
-$$
+```math
 \Huge \frac{C \cdot P}{B} < collateralRatio
-$$
+```
 
-For simplicity in hackathon context, we simulate liquidation behavior.
+For simplicity in hackathon (MVP) context, we simulate liquidation behavior.
 
 
 #### Adjustable Functions (Callable Only by RiskGuard)
+The important design decision:
+
+Parameter changes must be externalized.
+
+So instead of hardcoding:
+
+```solidity
+uint256 public liquidationThreshold = 150;
+```
+
+We allow:
+
+```solidity
+function updateCollateralRatio(uint256 newRatio)
+```
+
+But only callable by RiskGuard.
 
 ```solidity
 function updateCollateralRatio(uint256 newRatio)
@@ -210,17 +244,17 @@ Access restricted.
 
 1. Collateral ratio always within bounds:
 
-$$
-\Huge 100\text{ Percent (1e18) } \leq \text{collateralRatio} \leq 200\text{ Percent (2e18) }
-$$
+```math
+\Huge 100\%\text{ (1e18) } \leq \text{collateralRatio} \leq 200\%\text{ (2e18) }
+```
 
 2. No borrowing when paused.
 
 3. Utilization defined as:
 
-$$
+```math
 \Huge U = \frac{totalDebt}{totalCollateral}
-$$
+```
 
 
 #### Failure Modes
@@ -232,13 +266,19 @@ This is why control logic lives offchain.
 
 
 
-### 2.2 `RiskGuard.sol`
+### 2. `RiskGuard.sol`
 
 #### Purpose
 
 Acts as the enforcement gateway between CRE and LendingProtocol.
 
-It prevents arbitrary manipulation while allowing controlled emergency response.
+It prevents arbitrary manipulation while allowing controlled emergency response. This is the actuator.
+
+Key properties:
+
+* Has authority over protocol parameters
+* Only CRE workflow executor can call it
+* Emits structured events
 
 
 #### Responsibilities
@@ -304,6 +344,16 @@ event RiskActionExecuted(
 
 This is critical for demo traceability.
 
+#### Modifier
+
+```solidity
+modifier onlyCRE() {
+    require(msg.sender == creExecutor);
+}
+```
+
+This contract should be kept thin. It only forwards to LendingProtocol.
+
 
 #### Security Model
 
@@ -317,9 +367,9 @@ RiskGuard is a **bounded actuator**.
 
 
 
-## 3. CRE Orchestration Layer
+## CRE Orchestration Layer
 
-This is the intelligence layer.
+This is the intelligence layer. This is the core of the project. CRE becomes the risk engine.
 
 CRE orchestrates:
 
@@ -329,10 +379,10 @@ CRE orchestrates:
 4. Onchain transaction execution
 
 
-### 3.1 Workflow Components
+### 1. Workflow Components
 
 
-#### Step 1 — Onchain State Fetch
+#### Step 1: Onchain State Fetch
 
 Fetch:
 
@@ -342,14 +392,18 @@ Fetch:
 * collateralRatio
 * borrowingPaused
 
-Derived metric:
+Derived metric (**Utilization**):
 
-$$
+```math
 \Huge U = \frac{totalDebt}{totalCollateral}
-$$
+```
+
+Important design detail:
+
+Normalized all data and kept everything in comparable scale.
 
 
-#### Step 2 — Offchain Data Fetch
+#### Step 2: Offchain Data Fetch
 
 From APIs:
 
@@ -358,7 +412,7 @@ From APIs:
 * Liquidity depth
 
 
-#### Step 3 — Risk Engine
+#### Step 3: Risk Engine
 
 Let:
 
@@ -369,24 +423,29 @@ Let:
 
 Compute:
 
-$$
+```math
 \Huge D = \frac{|P_{cex} - P_{oracle}|}{P_{oracle}}
-$$
+```
 
 Risk function:
 
 $$
+This must be deterministic. We define:
+
+```math
 \Huge \mathcal{R} = \alpha D + \beta V + \gamma U
-$$
+```
 
 Where:
 
 * (D) = price deviation
-* (V) = volatility
-* (U) = utilization
+* (V) = volatility (24h)
+* (U) = utilization stress
 
 
-#### Step 4 — Regime Classification
+#### Step 4: Regime Classification
+
+Weights are constants. Thresholds:
 
 Trigger if: 𝑅 > 𝜏
 
@@ -399,7 +458,9 @@ if R >= 0.25 → CRISIS
 ```
 
 
-#### Step 5 — Action Mapping
+#### Step 5: Action Mapping
+
+MapPING regime → action.
 
 | Regime   | Action                           |
 | -------- | -------------------------------- |
@@ -408,16 +469,30 @@ if R >= 0.25 → CRISIS
 | CRISIS   | Increase ratio + pause borrowing |
 
 
-#### Step 6 — Execution
+#### Step 6: Execution
+
+If action triggered:
 
 CRE submits transaction to:
 
 ```solidity
-RiskGuard.hardenProtocol(...)
+RiskGuard.hardenProtocol(newRatio)
+```
+
+Or:
+
+```solidity
 RiskGuard.pauseBorrowing()
 ```
 
-Transaction hash recorded.
+CRE logs:
+
+* Input data
+* Risk score
+* Decision
+* Tx hash
+
+This creates verifiable execution trace. Transaction hash recorded.
 
 
 ### Determinism Property
@@ -426,9 +501,9 @@ Risk computation is pure and reproducible.
 
 Given identical inputs:
 
-$$
+```math
 \Huge \mathcal{R}(t) = f(D,V,U)
-$$
+```
 
 Same output → same action.
 
@@ -436,53 +511,89 @@ This matters for verifiability.
 
 
 
-## 4. External Data Layer
+## External Data Layer
 
 This layer provides non-onchain signals.
 
 
-### 4.1 Binance Price API
+### 1. Binance Price API
 
 Purpose:
 
-Detect early divergence before oracle updates.
+- Detect early divergence before oracle updates.
 
 
-### 4.2 Volatility Source
+### 2. Volatility Source
 
 Can compute:
 
-$$
+```math
 \Huge V = \sqrt{\frac{1}{n} \sum (r_i - \bar{r})^2}
-$$
+```
 
 Where:
 
-$$
+```math
 \Huge r_i = \log\left(\frac{P_i}{P_{i-1}}\right)
-$$
+```
 
 Even simple rolling standard deviation is sufficient.
 
 
-### 4.3 Liquidity Depth API
-
-Optional but powerful.
+### 3. Liquidity Depth API
 
 Measures how thin order books are.
 
 Thin liquidity increases cascade probability.
 
 
-## 5. System-Wide Invariants
+## System-Wide Invariants
 
 1. Collateral ratio bounded.
 2. CRE cannot drain funds.
-3. BorrowingPaused only toggled by RiskGuard.
-4. Risk score only influences parameter updates — not balances.
+3. `BorrowingPaused` only toggled by RiskGuard.
+4. Risk score only influences parameter updates not balances.
 
 
-## 6. End-to-End Execution Example
+## Control Loop Behavior
+
+We now formalize the closed-loop dynamic.
+
+Let:
+
+* $\lambda(t)$ = collateral ratio
+* $\mathcal{R}(t)$ = risk score
+
+We define policy:
+
+```math
+\Huge 
+\lambda(t+1) =
+\begin{cases}
+\lambda(t) & \text{if } \mathcal{R} < \tau_1 ;\
+\lambda(t) + \Delta_1 & \text{if } \tau_1 \le \mathcal{R} < \tau_2 ;\
+\lambda(t) + \Delta_2 & \text{if } \mathcal{R} \ge \tau_2 ;\
+\end{cases}
+```
+
+This is dynamic risk adaptation.
+
+Traditional DeFi uses:
+
+```math
+\Huge 
+\lambda = \text{constant}
+```
+
+This protocol uses:
+
+```math
+\Huge 
+\lambda = f(\mathcal{R}(t))
+```
+
+
+## End-to-End Execution Example
 
 ### Normal Market
 
@@ -490,9 +601,9 @@ Thin liquidity increases cascade probability.
 * V = 0.02
 * U = 0.60
 
-$$
+```math
 \Huge \mathcal{R} = 0.08
-$$
+```
 
 No action.
 
@@ -503,15 +614,15 @@ No action.
 * V = 0.15
 * U = 0.85
 
-$$
+```math
 \Huge \mathcal{R} = 0.30
-$$
+```
 
 CRE:
 
-1. Calls hardenProtocol(170%)
-2. Calls pauseBorrowing()
-3. Emits RiskActionExecuted
+1. Calls `hardenProtocol(170%)`
+2. Calls `pauseBorrowing()`
+3. Emits `RiskActionExecuted`
 
 Visible on Tenderly.
 
@@ -556,6 +667,7 @@ Prevents runaway tightening.
 
 
 ## 9. Architectural Strength
+## Architectural Strength
 
 This design:
 
@@ -582,3 +694,4 @@ Example:
 - Feed volatility + liquidity metrics
 - LLM explains risk category
 - Decision logic is still rule-based
+This is autonomous. It is a **dynamic systemic risk controller**.
