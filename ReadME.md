@@ -1,4 +1,5 @@
-> # Architecture of the **Autonomous Risk Sentinel Protocol**
+# Autonomous Risk Sentinel Protocol
+
 A Chainlink CRE-powered system that continuously monitors protocol risk and automatically triggers defensive actions onchain.
 
 The system connects:
@@ -10,8 +11,7 @@ The system connects:
 
 All orchestrated through Chainlink Runtime Environment workflows.
 
-## 0. System Overview
-# Architecture of the **Autonomous Risk Sentinel Protocol**.
+
 
 ## System Overview
 
@@ -23,9 +23,9 @@ From the first principles, this system is a **closed-loop risk control framework
 
 First is the **Blockchain Layer**, where we have two smart contracts.
 
-`LendingProtocol` simulates a lending protocol with collateral deposits and borrowing.
+- `LendingProtocol` simulates a lending protocol with collateral deposits and borrowing.
 
-`RiskGuard` acts as the protocol’s defensive control module, capable of adjusting collateral requirements or pausing borrowing.
+- `RiskGuard` acts as the protocol’s defensive control module, capable of adjusting collateral requirements or pausing borrowing.
 
 Second is the **CRE Orchestration Layer**, which continuously monitors the system.
 
@@ -45,7 +45,7 @@ The control loop is:
 Observe → Quantify → Decide → Execute → Emit
 ```
 
-### 0.1 Concrete Example Use Case
+### Concrete Example Use Case
 
 Let’s say we simulate:
 
@@ -62,7 +62,9 @@ Then automatically:
 - Trigger circuit breaker
 - Notify governance
 
-## 1. High-Level Architecture Diagram
+
+
+## High-Level Architecture Diagram
 
 ```bash
                     ┌──────────────────────┐
@@ -74,38 +76,39 @@ Then automatically:
                     └──────────┬───────────┘
                                │
                                ▼
-                   ┌───────────────────────┐
-                   │   CRE Workflow        │
-                   │-----------------------│
-                   │  1. Fetch Offchain    │
-                   │  2. Fetch Onchain     │
-                   │  3. Compute Risk      │
-                   │  4. Decision Engine   │
-                   │  5. Submit Tx         │
-                   └──────────┬────────────┘
-                              │
-                              ▼
-        ┌──────────────────────────────────────────┐
-        │             Blockchain Layer             │
-        │------------------------------------------│
-        │  LendingProtocol.sol                     │
-        │  RiskGuard.sol                           │
-        └──────────────────────────────────────────┘
+                    ┌───────────────────────┐
+                    │   CRE Workflow        │
+                    │-----------------------│
+                    │  1. Fetch Offchain    │
+                    │  2. Fetch Onchain     │
+                    │  3. Compute Risk      │
+                    │  4. Decision Engine   │
+                    │  5. Submit Tx         │
+                    └──────────┬────────────┘
+                               │
+                               ▼
+                    ┌────────────────────────┐
+                    │  Blockchain Layer      │
+                    │------------------------│
+                    │  LendingProtocol.sol   │
+                    │  RiskGuard.sol         │
+                    └────────────────────────┘
 ```
 
-## 2. Blockchain Layer
 In control theory terms:
 
 * The lending protocol is the plant.
 * Market signals are disturbances.
 * CRE workflow is the controller.
-* RiskGuard contract is the actuator.
+* `RiskGuard` contract is the actuator.
 
 We can decompose this into 3 domains:
 
 1. Onchain execution layer
 2. Offchain orchestration layer (CRE)
 3. Data ingestion layer
+
+
 
 ## Blockchain Layer
 
@@ -136,7 +139,7 @@ It exposes adjustable risk parameters that can be dynamically modified by `RiskG
 
 #### State Variables
 
-##### i. Economic State
+##### **i. Economic State**
 
 ```solidity
 uint256 public totalCollateral;
@@ -146,7 +149,7 @@ uint256 public totalDebt;
 These represent protocol-wide exposure.
 
 
-##### ii. Risk Parameters
+##### **ii. Risk Parameters**
 
 ```solidity
 uint256 public collateralRatio; // e.g., 150% scaled by 1e18
@@ -157,7 +160,7 @@ bool public borrowingPaused;
 These are dynamically adjustable.
 
 
-##### iii. Accounting
+##### **iii. Accounting**
 
 ```solidity
 mapping(address => uint256) public collateralBalance;
@@ -352,7 +355,7 @@ modifier onlyCRE() {
 }
 ```
 
-This contract should be kept thin. It only forwards to LendingProtocol.
+This contract should be kept thin. It only forwards to `LendingProtocol`.
 
 
 #### Security Model
@@ -379,7 +382,7 @@ CRE orchestrates:
 4. Onchain transaction execution
 
 
-### 1. Workflow Components
+### Workflow Components
 
 
 #### Step 1: Onchain State Fetch
@@ -387,10 +390,10 @@ CRE orchestrates:
 Fetch:
 
 * Oracle price
-* totalCollateral
-* totalDebt
-* collateralRatio
-* borrowingPaused
+* `totalCollateral`
+* `totalDebt`
+* `collateralRatio`
+* `borrowingPaused`
 
 Derived metric (**Utilization**):
 
@@ -405,7 +408,7 @@ Normalized all data and kept everything in comparable scale.
 
 #### Step 2: Offchain Data Fetch
 
-From APIs:
+**From APIs:**
 
 * Binance ETH price
 * 24h volatility
@@ -421,15 +424,13 @@ Let:
 - 𝑉 = Volatility index
 - 𝑅 = Reserve ratio
 
-Compute:
+**Compute:**
 
 ```math
 \Huge D = \frac{|P_{cex} - P_{oracle}|}{P_{oracle}}
 ```
 
-Risk function:
-
-$$
+**Risk function:**
 This must be deterministic. We define:
 
 ```math
@@ -447,9 +448,9 @@ Where:
 
 Weights are constants. Thresholds:
 
-Trigger if: 𝑅 > 𝜏
+Trigger if: **𝑅 > 𝜏**
 
-Where 𝜏 is a threshold value
+Where **𝜏** is a threshold value
 
 ```bash
 if R < 0.15 → NORMAL
@@ -516,14 +517,14 @@ This matters for verifiability.
 This layer provides non-onchain signals.
 
 
-### 1. Binance Price API
+### 1. Binance Price API (multiple CREXs)
 
 Purpose:
 
 - Detect early divergence before oracle updates.
 
 
-### 2. Volatility Source
+### 2. Volatility Source (if API unavailable)
 
 Can compute:
 
@@ -540,7 +541,7 @@ Where:
 Even simple rolling standard deviation is sufficient.
 
 
-### 3. Liquidity Depth API
+### 3. Liquidity Depth API (Optional but Powerful)
 
 Measures how thin order books are.
 
@@ -628,7 +629,7 @@ Visible on Tenderly.
 
 
 
-## 7. Security Considerations
+## Security Considerations
 
 We must restrict:
 
@@ -639,26 +640,26 @@ We must restrict:
 
 
 
-## 8. Failure Modes & Mitigations
+## Failure Modes & Mitigations
 
 We must anticipate issues.
 
-- Case 1 — API failure
+### Case 1: API failure
 
 CRE:
 
 * Must fail safely
 * If missing data → do nothing
 
-- Case 2 — Oracle glitch
+### Case 2: Oracle glitch
 
 We detect abnormal deviation, but require confirmation across 2 sources.
 
-- Case 3 — Overreaction
+### Case 3 — Overreaction
 
 We cap:
 
-```
+```solidity
 maxCollateralRatio = 200%
 ```
 
@@ -666,7 +667,6 @@ Prevents runaway tightening.
 
 
 
-## 9. Architectural Strength
 ## Architectural Strength
 
 This design:
@@ -677,11 +677,11 @@ This design:
 * Provides measurable risk adaptation
 * Demonstrates real-world financial engineering principles
 
-This is **autonomous preventative stabilization logic**. It is a **dynamic systemic risk controller**.
+This is **autonomous preventative stabilization logic**.
 
 
 
-## 10. How AI Can Be Used (Future)
+## How AI Can Be Used (Future)
 
 Use AI for:
 
@@ -694,4 +694,5 @@ Example:
 - Feed volatility + liquidity metrics
 - LLM explains risk category
 - Decision logic is still rule-based
+
 This is autonomous. It is a **dynamic systemic risk controller**.
