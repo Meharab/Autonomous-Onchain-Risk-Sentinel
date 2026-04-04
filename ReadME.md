@@ -1,5 +1,7 @@
 # Autonomous Risk Sentinel Protocol
 
+> _**[YouTube Demo](https://www.youtube.com/embed/CSIz0I10sCc)**_
+
 A Chainlink CRE-powered system that continuously monitors protocol risk and automatically triggers defensive actions onchain.
 
 The system connects:
